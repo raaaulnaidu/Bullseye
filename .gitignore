@@ -1,0 +1,26 @@
+# Secrets
+.env
+*.key
+
+# Student data — FERPA protected, never push
+lab01_data/
+submissions/
+ui_output/
+
+# Cache & runtime
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude session
+.claude/
+
+# Docs
+*.docx
+user_guide.html

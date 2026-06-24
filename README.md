@@ -1,5 +1,19 @@
+---
+title: BullsEye
+emoji: 🎓
+colorFrom: blue
+colorTo: indigo
+sdk: streamlit
+sdk_version: 1.50.0
+app_file: app.py
+pinned: false
+license: mit
+---
+
 # AI Grading Assistant
 ### Automated feedback and grading for Teaching Assistants — AI for Analytics Course
+
+> **HF Spaces secrets:** Set `ANTHROPIC_API_KEY` and `HF_TOKEN` in Space Settings → Variables and Secrets.
 
 ---
 
