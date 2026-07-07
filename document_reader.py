@@ -5,10 +5,11 @@ Handles text extraction from PDF and DOCX files.
 Supports both single-file and batch (folder) reading.
 """
 
-import os
 import re
+import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -56,10 +57,84 @@ def extract_text_from_docx(file_path: str) -> str:
         raise RuntimeError(f"Failed to read DOCX '{file_path}': {e}")
 
 
+def extract_text_from_twb(file_path: str) -> str:
+    """
+    Extract grading-relevant metadata from a Tableau workbook (.twb).
+    Pulls: worksheet names, chart titles, captions, calculated field names,
+    annotations, and parameter names from the XML structure.
+    """
+    try:
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+    except ET.ParseError as e:
+        raise RuntimeError(f"Could not parse Tableau file '{file_path}': {e}")
+
+    sections = ["[Tableau Workbook Analysis]\n"]
+
+    # Worksheet names and titles
+    worksheets = root.findall(".//{*}worksheet") or root.findall(".//worksheet")
+    if worksheets:
+        sections.append("Worksheets / Charts built:")
+        for ws in worksheets:
+            name = ws.get("name", "")
+            if name:
+                sections.append(f"  - {name}")
+
+    # Calculated fields
+    calc_fields = []
+    for calc in root.iter():
+        if calc.get("formula") and calc.get("name"):
+            calc_fields.append(f"  - {calc.get('name')}: {calc.get('formula','')[:120]}")
+    if calc_fields:
+        sections.append("\nCalculated fields:")
+        sections.extend(calc_fields[:20])
+
+    # Captions and titles (any element with a caption attribute)
+    captions = set()
+    for el in root.iter():
+        for attr in ("caption", "title", "value"):
+            v = el.get(attr, "").strip()
+            if v and len(v) > 3 and len(v) < 200:
+                captions.add(v)
+    if captions:
+        sections.append("\nTitles / Labels found:")
+        for c in sorted(captions)[:30]:
+            sections.append(f"  - {c}")
+
+    # Data source fields
+    fields = set()
+    for col in root.iter():
+        if col.get("datatype") and col.get("name"):
+            fields.add(col.get("name", "").lstrip("[").rstrip("]"))
+    if fields:
+        sections.append("\nData fields used:")
+        sections.append("  " + ", ".join(sorted(fields)[:40]))
+
+    result = "\n".join(sections)
+    if len(result.strip()) < 50:
+        return "[Tableau file found but no readable metadata could be extracted — grade based on PDF report]"
+    return result
+
+
+def extract_text_from_twbx(file_path: str) -> str:
+    """Extract from a Tableau packaged workbook (.twbx) — it's a ZIP containing a .twb."""
+    try:
+        with zipfile.ZipFile(file_path, "r") as z:
+            twb_names = [n for n in z.namelist() if n.endswith(".twb")]
+            if not twb_names:
+                return "[No .twb found inside .twbx — grade based on PDF report]"
+            import tempfile
+            with tempfile.TemporaryDirectory() as tmp:
+                twb_path = z.extract(twb_names[0], tmp)
+                return extract_text_from_twb(twb_path)
+    except zipfile.BadZipFile:
+        return "[Could not open .twbx file — it may be corrupted]"
+
+
 def read_document(file_path: str) -> str:
     """
     Auto-detect file type and extract text content.
-    Supports .pdf and .docx files.
+    Supports: .pdf, .docx, .txt, .md, .twb, .twbx
     """
     path = Path(file_path)
     if not path.exists():
@@ -68,14 +143,24 @@ def read_document(file_path: str) -> str:
     suffix = path.suffix.lower()
     if suffix == ".pdf":
         return extract_text_from_pdf(file_path)
-    elif suffix in (".docx", ".doc"):
+    elif suffix == ".docx":
         return extract_text_from_docx(file_path)
+    elif suffix == ".doc":
+        raise ValueError(
+            "Legacy .doc files are not supported by python-docx. "
+            "Please save the file as .docx or PDF before grading."
+        )
     elif suffix in (".txt", ".md"):
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
+    elif suffix == ".twb":
+        return extract_text_from_twb(file_path)
+    elif suffix == ".twbx":
+        return extract_text_from_twbx(file_path)
     else:
         raise ValueError(
-            f"Unsupported file type '{suffix}'. Supported: .pdf, .docx, .txt, .md"
+            f"Unsupported file type '{suffix}'. "
+            f"Supported: .pdf, .docx, .txt, .md, .twb, .twbx"
         )
 
 
@@ -90,7 +175,7 @@ def load_student_submissions(folder_path: str) -> List[Dict]:
     if not folder.is_dir():
         raise NotADirectoryError(f"Submissions folder not found: {folder_path}")
 
-    supported_extensions = {".pdf", ".docx", ".doc", ".txt", ".md"}
+    supported_extensions = {".pdf", ".docx", ".txt", ".md", ".twb", ".twbx"}
     submissions = []
 
     for file_path in sorted(folder.iterdir()):

@@ -21,6 +21,7 @@ import csv
 import json
 import math
 import os
+import random
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -126,6 +127,62 @@ def _pearson(h: List[float], a: List[float]) -> float:
     den = math.sqrt(sum((x - mh) ** 2 for x in h) * sum((y - ma) ** 2 for y in a))
     return num / den if den else 0.0
 
+
+def _pearson_pvalue(h: List[float], a: List[float]) -> Tuple[float, float]:
+    """Return (r, p_value) using scipy."""
+    try:
+        from scipy import stats
+        r, p = stats.pearsonr(h, a)
+        return round(float(r), 3), round(float(p), 4)
+    except Exception:
+        return _pearson(h, a), float("nan")
+
+
+def _bias_ttest(h: List[float], a: List[float]) -> Tuple[float, float]:
+    """One-sample t-test: are the AI-Human differences significantly different from 0?"""
+    try:
+        from scipy import stats
+        diffs = [ai - hi for hi, ai in zip(h, a)]
+        t_stat, p = stats.ttest_1samp(diffs, 0)
+        return round(float(t_stat), 3), round(float(p), 4)
+    except Exception:
+        return float("nan"), float("nan")
+
+
+def _bootstrap_ci(h: List[float], a: List[float], n_boot: int = 2000,
+                  ci: float = 0.95) -> Tuple[float, float]:
+    """Bootstrap 95% confidence interval for MAE."""
+    random.seed(42)
+    n = len(h)
+    mae_samples = []
+    for _ in range(n_boot):
+        idx = [random.randint(0, n - 1) for _ in range(n)]
+        hs = [h[i] for i in idx]; as_ = [a[i] for i in idx]
+        mae_samples.append(sum(abs(x - y) for x, y in zip(hs, as_)) / n)
+    mae_samples.sort()
+    lo = mae_samples[int((1 - ci) / 2 * n_boot)]
+    hi = mae_samples[int((1 + ci) / 2 * n_boot)]
+    return round(lo, 3), round(hi, 3)
+
+
+def _cohens_kappa(h: List[float], a: List[float]) -> float:
+    """Cohen's kappa for exact agreement (scores rounded to integers)."""
+    h_int = [int(round(x)) for x in h]
+    a_int = [int(round(x)) for x in a]
+    labels = sorted(set(h_int + a_int))
+    n = len(h_int)
+    if n == 0:
+        return float("nan")
+    observed = sum(1 for hi, ai in zip(h_int, a_int) if hi == ai) / n
+    expected = 0.0
+    for label in labels:
+        p_h = sum(1 for x in h_int if x == label) / n
+        p_a = sum(1 for x in a_int if x == label) / n
+        expected += p_h * p_a
+    if expected == 1:
+        return 1.0 if observed == 1 else float("nan")
+    return round((observed - expected) / (1 - expected), 3)
+
 def _qwk(h: List[float], a: List[float], min_rating: int = 0, max_rating: int = None) -> float:
     """
     Quadratic Weighted Kappa between human (h) and AI (a) scores.
@@ -206,17 +263,25 @@ def compute_metrics(human_grades: Dict, ai_grades: Dict) -> Dict:
 
     h_totals = [human_grades[sid]["total"] for sid in common]
     a_totals = [ai_grades[sid]["total"]    for sid in common]
+    r, p_r   = _pearson_pvalue(h_totals, a_totals)
+    t, p_t   = _bias_ttest(h_totals, a_totals)
+    ci_lo, ci_hi = _bootstrap_ci(h_totals, a_totals)
     metrics["overall"] = {
-        "mae":             round(_mae(h_totals, a_totals), 3),
-        "rmse":            round(_rmse(h_totals, a_totals), 3),
-        "within_1pt_pct":  round(_within_n(h_totals, a_totals, 1.0), 1),
-        "within_2pt_pct":  round(_within_n(h_totals, a_totals, 2.0), 1),
-        "exact_match_pct": round(_within_n(h_totals, a_totals, 0.0), 1),
-        "bias":            round(_bias(h_totals, a_totals), 3),
-        "correlation":     round(_pearson(h_totals, a_totals), 3),
-        "qwk":             round(_qwk(h_totals, a_totals, 0, TOTAL_MAX), 3),
-        "human_avg":       round(sum(h_totals) / len(h_totals), 2),
-        "ai_avg":          round(sum(a_totals) / len(a_totals), 2),
+        "mae":               round(_mae(h_totals, a_totals), 3),
+        "mae_ci_95":         [ci_lo, ci_hi],
+        "rmse":              round(_rmse(h_totals, a_totals), 3),
+        "within_1pt_pct":    round(_within_n(h_totals, a_totals, 1.0), 1),
+        "within_2pt_pct":    round(_within_n(h_totals, a_totals, 2.0), 1),
+        "exact_match_pct":   round(_within_n(h_totals, a_totals, 0.0), 1),
+        "bias":              round(_bias(h_totals, a_totals), 3),
+        "bias_tstat":        t,
+        "bias_pvalue":       p_t,
+        "correlation":       r,
+        "correlation_pvalue":p_r,
+        "cohens_kappa":      _cohens_kappa(h_totals, a_totals),
+        "qwk":               round(_qwk(h_totals, a_totals, 0, TOTAL_MAX), 3),
+        "human_avg":         round(sum(h_totals) / len(h_totals), 2),
+        "ai_avg":            round(sum(a_totals) / len(a_totals), 2),
     }
     metrics["student_detail"] = sorted(
         [
@@ -258,17 +323,21 @@ def generate_report(metrics: Dict, output_path: str) -> str:
 
     ov = metrics["overall"]
     L("\n── OVERALL SCORE  (out of 20) ──────────────────────────────")
-    L(f"  Human avg    : {ov['human_avg']:.2f}")
-    L(f"  AI avg       : {ov['ai_avg']:.2f}")
+    L(f"  Human avg          : {ov['human_avg']:.2f}")
+    L(f"  AI avg             : {ov['ai_avg']:.2f}")
     direction = "AI grades higher" if ov["bias"] > 0 else "AI grades lower"
-    L(f"  AI bias      : {ov['bias']:+.3f} pts  ({direction})")
-    L(f"  MAE          : {ov['mae']} pts")
-    L(f"  RMSE         : {ov['rmse']} pts")
-    L(f"  Within ±1pt  : {ov['within_1pt_pct']}%")
-    L(f"  Within ±2pt  : {ov['within_2pt_pct']}%")
-    L(f"  Exact match  : {ov['exact_match_pct']}%")
-    L(f"  Pearson r    : {ov['correlation']}")
-    L(f"  QWK          : {ov['qwk']}  (cf. published benchmark 0.68 — see RESEARCH_FINDINGS.md)")
+    L(f"  AI bias            : {ov['bias']:+.3f} pts  ({direction})")
+    L(f"    t-statistic      : {ov['bias_tstat']}")
+    L(f"    p-value          : {ov['bias_pvalue']}  {'(significant)' if ov['bias_pvalue'] < 0.05 else '(not significant)'}")
+    L(f"  MAE                : {ov['mae']} pts")
+    L(f"    95% CI (bootstrap): [{ov['mae_ci_95'][0]}, {ov['mae_ci_95'][1]}]")
+    L(f"  RMSE               : {ov['rmse']} pts")
+    L(f"  Within ±1pt        : {ov['within_1pt_pct']}%")
+    L(f"  Within ±2pt        : {ov['within_2pt_pct']}%")
+    L(f"  Exact match        : {ov['exact_match_pct']}%")
+    L(f"  Pearson r          : {ov['correlation']}  (p={ov['correlation_pvalue']})")
+    L(f"  Cohen's kappa      : {ov['cohens_kappa']}")
+    L(f"  QWK                : {ov['qwk']}  (published benchmark = 0.68)")
 
     L("\n── PER-CRITERION METRICS ───────────────────────────────────")
     for c, m in metrics["per_criterion"].items():

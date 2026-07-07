@@ -531,7 +531,7 @@ Target for publication: **QWK ≥ 0.60** on the 15-student Lab 01 gold standard 
 
 ## 11. Transferability to Other Universities
 
-A core design goal of this project is that **no institution-specific knowledge is hardcoded anywhere in the system**. Any professor or TA at any university can adopt it by supplying three files they already have:
+A core design goal of this project is that **no institution-specific knowledge is hardcoded anywhere in the system**. Any instructor or TA at any university can adopt it by supplying three files they already have:
 
 ```
 Assignment instructions   →   any PDF or DOCX
@@ -635,4 +635,4 @@ ta_grader/
 ---
 
 *For the full published-paper comparison with sample sizes and evaluation metrics, see `RESEARCH_FINDINGS.md`.*  
-*For architecture roadmap discussion, see professor meeting notes.*
+*For architecture roadmap discussion, see the project roadmap and publication gap analysis.*

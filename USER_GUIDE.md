@@ -152,14 +152,14 @@ python calibrated_grader.py \
 
 ## Comparing Two Models
 
-To generate a side-by-side comparison report (useful for professor demos):
+To generate a side-by-side comparison report (useful for faculty demos):
 ```bash
 python model_comparison.py \
   --frontier  path/to/frontier_results/all_results.json \
   --local     path/to/local_results/all_results.json \
   --output    path/to/comparison/
 ```
-Opens as an HTML file — share it with your professor directly.
+Opens as an HTML file for faculty or collaborator review.
 
 ---
 
@@ -196,4 +196,4 @@ Opens as an HTML file — share it with your professor directly.
 ## Getting Help
 
 Contact: swethasingireddy8@gmail.com  
-Project repo: `/Users/rahulnaidu/Desktop/ta_grader/`
+Project repo: clone the repository and follow `README.md` or `SETUP.md`.

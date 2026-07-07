@@ -199,6 +199,8 @@ def format_as_turns(
         user_content = user_prompt_template.format(
             instructions=instructions_text[:1000],  # shorter in examples
             rag_evidence=ex.get("evidence", "(no evidence)"),
+            submission_context=ex.get("evidence", "(example context omitted)"),
+            evidence_mode="few_shot_example",
         )
         # Prefix with grade band hint so Claude understands the score level
         band = ex.get("grade_band", "")

@@ -264,7 +264,7 @@ RULES:
   - Never count the same issue against more than one criterion.
   - When uncertain between two bands, always choose the HIGHER one.
   - Apply the same standard to every student.
-  - Grade ONLY the evidence provided.
+  - Use rubric evidence first, but check the submission context before assigning zero.
 
 Assignment: {assignment_name}
 
@@ -303,14 +303,20 @@ _USER_TEMPLATE = """
 ASSIGNMENT INSTRUCTIONS:
 {instructions}
 
+GRADING MODE:
+{evidence_mode}
+
 RUBRIC-EXTRACTED EVIDENCE:
-(Only the most relevant portions of the student's anonymized submission
-are shown below, organized by rubric criterion.)
+(Most relevant portions of the anonymized submission, organized by rubric criterion.)
 
 {rag_evidence}
 
-Evaluate ONLY the evidence shown above. If a criterion's evidence section
-is empty or unclear, award 0 and explain what was expected.
+ANONYMIZED SUBMISSION CONTEXT:
+{submission_context}
+
+Use the rubric-extracted evidence as the main signal. If the evidence section
+misses a relevant answer, use the anonymized submission context to avoid unfair
+zeroes. Award 0 only when the requirement is absent from both evidence and context.
 Return ONLY JSON.
 """
 
@@ -375,11 +381,15 @@ def _parse_json_response(raw_text: str, criteria: List[Dict], max_score: int) ->
     except json.JSONDecodeError:
         return _empty_result(criteria, max_score, note="Model output could not be parsed as JSON.")
 
-    # Standard schema — recompute total in case model arithmetic was wrong
+    # Standard schema — normalize to the exact rubric in case the model renamed,
+    # omitted, duplicated, or over-scored criteria.
     if "criteria" in result and isinstance(result["criteria"], list) and result["criteria"]:
+        result["criteria"] = _normalize_criteria(result["criteria"], criteria)
         total = sum(float(c.get("awarded_points", 0)) for c in result["criteria"])
         result["total_score"] = round(total, 1)
         result["percentage"]  = round(total / max_score * 100, 1) if max_score else 0.0
+        result.setdefault("overall_feedback", "")
+        result.setdefault("consistency_notes", "")
         return result
 
     # Non-standard schema repair — map whatever the model returned to expected criteria
@@ -423,6 +433,41 @@ def _parse_json_response(raw_text: str, criteria: List[Dict], max_score: int) ->
     }
 
 
+def _normalize_criteria(model_criteria: List[Dict], rubric_criteria: List[Dict]) -> List[Dict]:
+    """Map model-returned criteria back to the exact rubric order and max points."""
+    by_name = {}
+    for c in model_criteria:
+        name = str(c.get("name", "")).strip().lower()
+        if name:
+            by_name[name] = c
+
+    normalized = []
+    for i, rubric in enumerate(rubric_criteria):
+        rname = str(rubric.get("name", f"Criterion {i+1}"))
+        rmax = float(rubric.get("max_points", 0))
+        match = by_name.get(rname.lower())
+        if match is None and i < len(model_criteria):
+            match = model_criteria[i]
+        match = match or {}
+
+        raw = match.get("awarded_points", match.get("score", 0))
+        try:
+            awarded = float(raw)
+        except (TypeError, ValueError):
+            awarded = 0.0
+        awarded = round(max(0.0, min(rmax, awarded)), 1)
+
+        normalized.append({
+            "name": rname,
+            "max_points": rmax,
+            "awarded_points": awarded,
+            "completed": str(match.get("completed", ""))[:600],
+            "missing_or_weak": str(match.get("missing_or_weak", ""))[:600],
+            "suggestion": str(match.get("suggestion", ""))[:600],
+        })
+    return normalized
+
+
 def _empty_result(criteria: List[Dict], max_score: int, note: str = "") -> dict:
     return {
         "total_score":      0,
@@ -452,6 +497,7 @@ class CalibratedGrader:
         api_key: str = None,
         ollama_url: str = "http://localhost:11434",
         rag_mode: str = "keyword",
+        evidence_mode: str = "hybrid",
         scoring_bands: dict = None,
     ):
         self.provider = provider
@@ -462,6 +508,7 @@ class CalibratedGrader:
         self.calibration_offset = calibration_offset
         self.few_shot_examples  = few_shot_examples or []
         self.rag_mode = rag_mode
+        self.evidence_mode = evidence_mode
 
         if provider == "ollama":
             self.client = OllamaClient(base_url=ollama_url)
@@ -505,6 +552,8 @@ class CalibratedGrader:
             session_set(anon_cache_key, anon_text)
             if anon_log:
                 print(f"    [privacy] {student_id}: {', '.join(anon_log)}")
+        else:
+            anon_log = ["Anonymized text loaded from session cache."]
 
         # Step 2 — RAG evidence (short-term cache + keyword or semantic mode)
         rag_cache_key = f"rag_{self.rag_mode}_{text_hash(anon_text)}"
@@ -517,9 +566,21 @@ class CalibratedGrader:
             session_set(rag_cache_key, rag_evidence)
 
         # Step 3 — build messages
+        context_limit = 9000 if self.evidence_mode == "hybrid" else 16000
+        prompt_rag_evidence = rag_evidence
+        if self.evidence_mode == "full_context":
+            prompt_rag_evidence = "(not used in full_context mode)"
+
+        if self.evidence_mode == "rag_only":
+            submission_context = "(not supplied; grading from retrieved evidence only)"
+        else:
+            submission_context = anon_text[:context_limit]
+
         student_prompt = _USER_TEMPLATE.format(
             instructions=instructions_text[:3000],
-            rag_evidence=rag_evidence,
+            rag_evidence=prompt_rag_evidence,
+            submission_context=submission_context,
+            evidence_mode=self.evidence_mode,
         )
 
         messages = []
@@ -556,11 +617,55 @@ class CalibratedGrader:
         result["max_score"] = self.max_score
         result["assignment_name"] = self.assignment_name
         result["rubric_criteria"] = self.criteria
+        result["model_trace"] = {
+            "provider": self.provider,
+            "model": self.model,
+            "rag_mode": self.rag_mode,
+            "evidence_mode": self.evidence_mode,
+            "student_name_supplied_to_privacy_layer": bool(student_name),
+            "anonymization_log": anon_log,
+            "instructions_chars_sent": len(instructions_text[:3000]),
+            "rag_evidence_chars_sent": len(prompt_rag_evidence),
+            "submission_context_chars_sent": len(submission_context),
+            "system_prompt": self.system_prompt,
+            "student_prompt": student_prompt,
+            "model_input_messages": messages,
+        }
 
         # Step 5 — apply calibration offset
         if self.calibration_offset != 0:
             result = self._apply_calibration(result)
 
+        result = self._attach_quality_flags(result)
+        return result
+
+    def _attach_quality_flags(self, result: dict) -> dict:
+        flags = []
+        notes = str(result.get("consistency_notes", "")).lower()
+        if "parse" in notes or "recovered" in notes:
+            flags.append("Model output needed schema repair")
+        if result.get("percentage", 0) < 70:
+            flags.append("Low total score")
+        if self.evidence_mode == "rag_only":
+            flags.append("RAG-only grading; context not supplied")
+
+        weak_criteria = []
+        for c in result.get("criteria", []):
+            cmax = float(c.get("max_points", 0) or 0)
+            pts = float(c.get("awarded_points", 0) or 0)
+            if cmax and pts < cmax * 0.6:
+                weak_criteria.append(c.get("name", "criterion"))
+        if weak_criteria:
+            flags.append("Very low criterion scores: " + ", ".join(weak_criteria[:3]))
+
+        confidence = 100
+        confidence -= 25 if any("schema" in f for f in flags) else 0
+        confidence -= 15 if result.get("percentage", 0) < 70 else 0
+        confidence -= min(30, len(weak_criteria) * 8)
+        confidence -= 10 if self.evidence_mode == "rag_only" else 0
+
+        result["review_flags"] = flags
+        result["confidence_score"] = max(0, min(100, confidence))
         return result
 
     def _apply_calibration(self, result: dict) -> dict:

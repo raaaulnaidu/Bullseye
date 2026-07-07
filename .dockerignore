@@ -1,0 +1,17 @@
+.env
+.venv/
+.git/
+.cache/
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+lab01_data/
+submissions/
+ui_output/
+demo_data/
+
+BullsEye_Faculty_Presentation.pptx
+AI_Grading_Assistant_Documentation.docx

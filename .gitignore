@@ -6,6 +6,7 @@
 lab01_data/
 submissions/
 ui_output/
+demo_data/
 
 # Cache & runtime
 .cache/

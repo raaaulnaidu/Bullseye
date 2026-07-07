@@ -208,7 +208,7 @@ order of magnitude as the published literature.
 ### For Classroom Testing (Next Week)
 1. Apply score calibration offset (+3–4 pts) to close the AI–human gap
 2. Run the full pipeline on all 15 Lab 01 submissions and verify output
-3. Have the professor or TA fill in the gold standard CSV for 5–8 students
+3. Have a human grader fill in the gold standard CSV for 5–8 students
 4. Run `evaluator.py` to produce the official evaluation report
 
 ### For Summer Publication
@@ -387,4 +387,4 @@ a stronger combined submission than either angle alone.
 
 ---
 
-*Framework written June 2026 based on professor feedback. Local model results to be added after testing.*
+*Framework written June 2026 based on project feedback. Local model results to be added after testing.*

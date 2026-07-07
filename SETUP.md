@@ -1,128 +1,130 @@
-# AI Grading Assistant — Setup Guide
-### AI for Analytics Course · Teaching Assistant Tool
+# BullsEye Setup Guide
 
----
+This guide is for running BullsEye locally from a fresh clone.
 
-## What This Does
-
-This tool helps Teaching Assistants grade student assignments automatically using Claude AI. Given:
-- The **assignment instructions** (PDF or DOCX)
-- A **grading rubric** (PDF or DOCX)
-- A **folder of student submissions** (PDF or DOCX)
-
-It produces:
-- **Per-student feedback files** — personalised `.txt` feedback for each student
-- **CSV summary** — class-wide spreadsheet with scores per criterion
-- **HTML dashboard** — interactive visual report you can open in a browser
-
----
-
-## Quick Start (5 minutes)
-
-### 1. Install Python dependencies
+## 1. Clone And Install
 
 ```bash
-pip install anthropic pdfplumber python-docx rich
-```
+git clone <repo-url> ta_grader
+cd ta_grader
 
-Or use the requirements file:
-```bash
+python3 -m venv .venv
+source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
-### 2. Get your Anthropic API key
-
-Sign up at [console.anthropic.com](https://console.anthropic.com) and create an API key.
-
-Set it as an environment variable (recommended):
-```bash
-# Mac / Linux
-export ANTHROPIC_API_KEY="sk-ant-..."
-
-# Windows (Command Prompt)
-set ANTHROPIC_API_KEY=sk-ant-...
-
-# Windows (PowerShell)
-$env:ANTHROPIC_API_KEY="sk-ant-..."
-```
-
-### 3. (Optional) Generate sample data to test first
+## 2. Configure API Keys
 
 ```bash
-python create_sample_data.py
+cp .env.example .env
 ```
 
-This creates 3 sample student submissions at different quality levels plus a rubric and instructions — no real student data needed for a demo.
+Edit `.env`.
 
-### 4. Run the grader
+Recommended:
 
-**Interactive mode** (guided prompts):
 ```bash
-python main.py
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**Command-line mode** (pass all args):
+Optional:
+
 ```bash
-python main.py \
-    --instructions path/to/instructions.pdf \
-    --rubric       path/to/rubric.docx \
-    --submissions  path/to/students_folder/ \
-    --output       path/to/output_folder/ \
-    --assignment   "Assignment 1: EDA with Python"
+OPENAI_API_KEY=sk-proj-...
+HF_TOKEN=hf_...
 ```
 
----
+For fully local grading with Ollama, no API key is needed, but Ollama must be running separately.
 
-## Folder Structure
+## 3. Start The App
 
-```
-ta_grader/
-├── main.py                  ← Run this to start the app
-├── grader.py                ← Claude API grading engine
-├── document_reader.py       ← PDF + DOCX text extraction
-├── report_generator.py      ← Feedback, CSV, and HTML reports
-├── create_sample_data.py    ← Generate demo files
-├── requirements.txt
-└── sample_data/             ← Created by create_sample_data.py
-    ├── assignment_instructions.docx
-    ├── grading_rubric.docx
-    ├── student_submissions/
-    │   ├── alice_chen_assignment1.docx
-    │   ├── bob_martinez_assignment1.docx
-    │   └── carol_liu_assignment1.docx
-    └── grading_output/      ← Created after running grader
-        ├── grading_summary_TIMESTAMP.csv
-        ├── grading_report_TIMESTAMP.html
-        └── student_feedback/
-            ├── Alice_Chen_feedback.txt
-            ├── Bob_Martinez_feedback.txt
-            └── Carol_Liu_feedback.txt
+```bash
+streamlit run app.py
 ```
 
----
+Open the local URL printed by Streamlit, usually:
 
-## Tips for Best Results
-
-**Rubric formatting:** The more specific your rubric, the better Claude grades. Include:
-- Criterion names
-- Max points per criterion
-- What full marks vs. partial credit looks like
-
-**File naming:** Name student files as `firstname_lastname_assignment1.docx` — the app automatically extracts the student name from the filename.
-
-**Supported file types:** `.pdf`, `.docx`, `.doc`, `.txt`, `.md`
-
-**API costs:** Each grading call uses ~2,000–4,000 tokens. At standard Claude rates, grading 30 students costs roughly $0.30–$1.00.
-
----
-
-## Troubleshooting
-
-| Problem | Solution |
-|---|---|
-| `ModuleNotFoundError: pdfplumber` | Run `pip install pdfplumber` |
-| `ModuleNotFoundError: docx` | Run `pip install python-docx` |
-| `AuthenticationError` | Check your API key is set correctly |
-| Empty PDF extraction | The PDF may be image-based (scanned). Convert to text-PDF first. |
-| Student name shows as filename | Rename files to `firstname_lastname.docx` format |
+```text
+http://localhost:8501
 ```
+
+## 4. Run With Demo Data
+
+Generate synthetic data:
+
+```bash
+python create_demo_data.py
+```
+
+In the app, upload:
+
+- Instructions: `demo_data/assignment_instructions.docx`
+- Rubric: `demo_data/grading_rubric.docx`
+- Submissions: files inside `demo_data/student_submissions/`
+
+## 5. Run Existing Lab 01 Evaluation
+
+The real Lab 01 data is FERPA-sensitive and ignored by git. If you receive it through an approved channel, place it under `lab01_data/`.
+
+Then run:
+
+```bash
+python evaluator.py \
+  --human lab01_data/output/gold_standard_template.csv \
+  --ai lab01_data/experiments/set2_results.json \
+  --output lab01_data/output/evaluation_report.txt
+```
+
+Calibration validation:
+
+```bash
+python calibration_experiment.py \
+  --ai lab01_data/experiments/set2_results.json \
+  --human lab01_data/output/gold_standard_template.csv
+```
+
+## 6. Publication Experiment Runner
+
+Semantic RAG comparison:
+
+```bash
+python run_experiments.py --run set5 --anthropic-key "$ANTHROPIC_API_KEY"
+```
+
+Hosted Hugging Face comparison:
+
+```bash
+python run_experiments.py --run hf --hf-token "$HF_TOKEN"
+```
+
+Few-shot example rebuild:
+
+```bash
+python run_experiments.py --run shots
+```
+
+## 7. Docker
+
+```bash
+docker build -t bullseye-grader .
+docker run --rm -p 8501:8501 --env-file .env bullseye-grader
+```
+
+Open:
+
+```text
+http://localhost:8501
+```
+
+## 8. Privacy
+
+Do not commit:
+
+- `.env`
+- real student submissions
+- `lab01_data/`
+- `submissions/`
+- `ui_output/`
+
+These are ignored by git and Docker.
