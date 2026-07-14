@@ -48,8 +48,8 @@ Core capabilities:
 ### 1. Clone The Repository
 
 ```bash
-git clone <repo-url> ta_grader
-cd ta_grader
+git clone https://github.com/raaaulnaidu/Bullseye.git
+cd Bullseye
 ```
 
 ### 2. Create A Python Environment

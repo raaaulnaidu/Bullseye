@@ -34,8 +34,8 @@ BullsEye is a privacy-aware, rubric-calibrated AI grading assistant for universi
 ## Quick Start For Faculty
 
 ```bash
-git clone <repo-url> ta_grader
-cd ta_grader
+git clone https://github.com/raaaulnaidu/Bullseye.git
+cd Bullseye
 
 python3 -m venv .venv
 source .venv/bin/activate

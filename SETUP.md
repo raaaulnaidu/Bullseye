@@ -5,8 +5,8 @@ This guide is for running BullsEye locally from a fresh clone.
 ## 1. Clone And Install
 
 ```bash
-git clone <repo-url> ta_grader
-cd ta_grader
+git clone https://github.com/raaaulnaidu/Bullseye.git
+cd Bullseye
 
 python3 -m venv .venv
 source .venv/bin/activate
