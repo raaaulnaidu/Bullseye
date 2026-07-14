@@ -1,10 +1,11 @@
 """
 document_reader.py
 ------------------
-Handles text extraction from PDF and DOCX files.
+Handles text extraction from PDF, DOCX, TXT, Tableau, CSV, and Excel files.
 Supports both single-file and batch (folder) reading.
 """
 
+import csv
 import re
 import zipfile
 import xml.etree.ElementTree as ET
@@ -131,10 +132,106 @@ def extract_text_from_twbx(file_path: str) -> str:
         return "[Could not open .twbx file — it may be corrupted]"
 
 
+def extract_text_from_csv(file_path: str) -> str:
+    """Convert a CSV file into readable row/column text for grading."""
+    rows = []
+    path = Path(file_path)
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="", errors="replace") as f:
+            sample = f.read(4096)
+            f.seek(0)
+            try:
+                dialect = csv.Sniffer().sniff(sample)
+            except csv.Error:
+                dialect = csv.excel
+            reader = csv.reader(f, dialect)
+            for row in reader:
+                rows.append([cell.strip() for cell in row])
+    except Exception as e:
+        raise RuntimeError(f"Failed to read CSV '{file_path}': {e}")
+
+    if not rows:
+        return "[CSV file is empty]"
+
+    max_rows = 200
+    max_cols = 30
+    headers = rows[0][:max_cols]
+    sections = [f"[CSV Submission: {path.name}]", f"Rows: {len(rows)}", ""]
+
+    for idx, row in enumerate(rows[1:max_rows + 1], start=1):
+        cells = row[:max_cols]
+        if headers and len(headers) == len(cells):
+            formatted = " | ".join(
+                f"{headers[i] or f'Column {i+1}'}: {cells[i]}"
+                for i in range(len(cells))
+                if cells[i]
+            )
+        else:
+            formatted = " | ".join(cell for cell in cells if cell)
+        if formatted:
+            sections.append(f"Row {idx}: {formatted}")
+
+    if len(rows) > max_rows + 1:
+        sections.append(f"\n[Truncated after {max_rows} data rows for grading context]")
+    return "\n".join(sections).strip()
+
+
+def extract_text_from_xlsx(file_path: str) -> str:
+    """Convert an Excel .xlsx workbook into readable sheet/row/column text for grading."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        raise ImportError("openpyxl is not installed. Run: pip install openpyxl")
+
+    path = Path(file_path)
+    try:
+        wb = load_workbook(file_path, read_only=True, data_only=True)
+    except Exception as e:
+        raise RuntimeError(f"Failed to read Excel workbook '{file_path}': {e}")
+
+    sections = [f"[Excel Submission: {path.name}]"]
+    max_rows_per_sheet = 120
+    max_cols = 30
+
+    for ws in wb.worksheets[:10]:
+        sections.append(f"\n[Sheet: {ws.title}]")
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            header_row = next(rows_iter)
+        except StopIteration:
+            sections.append("[Empty sheet]")
+            continue
+
+        headers = [
+            str(v).strip() if v is not None else f"Column {i+1}"
+            for i, v in enumerate(header_row[:max_cols])
+        ]
+        row_count = 0
+        for row_count, row in enumerate(rows_iter, start=1):
+            if row_count > max_rows_per_sheet:
+                sections.append(f"[Truncated after {max_rows_per_sheet} rows in this sheet]")
+                break
+            cells = [
+                "" if v is None else str(v).strip()
+                for v in row[:max_cols]
+            ]
+            formatted = " | ".join(
+                f"{headers[i]}: {cells[i]}"
+                for i in range(min(len(headers), len(cells)))
+                if cells[i]
+            )
+            if formatted:
+                sections.append(f"Row {row_count}: {formatted}")
+        if row_count == 0:
+            sections.append("[No data rows]")
+
+    return "\n".join(sections).strip()
+
+
 def read_document(file_path: str) -> str:
     """
     Auto-detect file type and extract text content.
-    Supports: .pdf, .docx, .txt, .md, .twb, .twbx
+    Supports: .pdf, .docx, .txt, .md, .twb, .twbx, .csv, .xlsx
     """
     path = Path(file_path)
     if not path.exists():
@@ -153,6 +250,15 @@ def read_document(file_path: str) -> str:
     elif suffix in (".txt", ".md"):
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
+    elif suffix == ".csv":
+        return extract_text_from_csv(file_path)
+    elif suffix == ".xlsx":
+        return extract_text_from_xlsx(file_path)
+    elif suffix == ".xls":
+        raise ValueError(
+            "Legacy .xls files are not supported. "
+            "Please save the spreadsheet as .xlsx or CSV before grading."
+        )
     elif suffix == ".twb":
         return extract_text_from_twb(file_path)
     elif suffix == ".twbx":
@@ -160,7 +266,7 @@ def read_document(file_path: str) -> str:
     else:
         raise ValueError(
             f"Unsupported file type '{suffix}'. "
-            f"Supported: .pdf, .docx, .txt, .md, .twb, .twbx"
+            f"Supported: .pdf, .docx, .txt, .md, .twb, .twbx, .csv, .xlsx"
         )
 
 
@@ -175,7 +281,7 @@ def load_student_submissions(folder_path: str) -> List[Dict]:
     if not folder.is_dir():
         raise NotADirectoryError(f"Submissions folder not found: {folder_path}")
 
-    supported_extensions = {".pdf", ".docx", ".txt", ".md", ".twb", ".twbx"}
+    supported_extensions = {".pdf", ".docx", ".txt", ".md", ".twb", ".twbx", ".csv", ".xlsx"}
     submissions = []
 
     for file_path in sorted(folder.iterdir()):

@@ -269,9 +269,11 @@ Future Work
 |---|---|
 | `README.md` | Main project overview and quickstart |
 | `SETUP.md` | Detailed installation and troubleshooting guide |
-| `FACULTY_SETUP_AND_PUBLICATION_BRIEF.md` | This shareable setup and research brief |
-| `PUBLICATION_GAP_ANALYSIS.md` | Detailed literature gap analysis |
-| `RESULTS_LAB01.md` | Current Lab 01 evaluation results |
+| `docs/README.md` | Documentation index |
+| `docs/FACULTY_SETUP_AND_PUBLICATION_BRIEF.md` | This shareable setup and research brief |
+| `docs/PAPER_COMPARISON_SIMPLE.md` | Plain-language paper comparison for meetings |
+| `docs/PUBLICATION_GAP_ANALYSIS.md` | Detailed literature gap analysis |
+| `docs/RESULTS_LAB01.md` | Current Lab 01 evaluation results |
 | `app.py` | Streamlit user interface |
 | `calibrated_grader.py` | Main grading engine |
 | `evaluator.py` | Evaluation metrics |

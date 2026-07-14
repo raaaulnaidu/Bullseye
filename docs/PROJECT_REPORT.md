@@ -245,7 +245,7 @@ Set 4 failed catastrophically (avg 1.7/20) because:
 
 ## 6. Comparison with Published Work
 
-Six published papers in the same domain were reviewed. See `RESEARCH_FINDINGS.md` for full details.
+Six published papers in the same domain were reviewed. See [`RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md) for full details.
 
 | Paper | Sample Size | Base Metric | Our Comparison |
 |---|---|---|---|
@@ -621,7 +621,7 @@ ta_grader/
 ├── multi_course_runner.py    ← Multi-course / multi-TA routing
 ├── .env                      ← API key (never commit)
 ├── requirements.txt          ← Python dependencies
-├── RESEARCH_FINDINGS.md      ← Full research findings + paper comparisons
+├── docs/RESEARCH_FINDINGS.md ← Full research findings + paper comparisons
 └── lab01_data/
     ├── source_files/         ← Instructions + rubric PDFs
     ├── student_submissions/  ← Student submission files
@@ -634,5 +634,5 @@ ta_grader/
 
 ---
 
-*For the full published-paper comparison with sample sizes and evaluation metrics, see `RESEARCH_FINDINGS.md`.*  
+*For the full published-paper comparison with sample sizes and evaluation metrics, see [`RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md).*  
 *For architecture roadmap discussion, see the project roadmap and publication gap analysis.*

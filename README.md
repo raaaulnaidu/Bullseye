@@ -12,6 +12,25 @@ BullsEye is a privacy-aware, rubric-calibrated AI grading assistant for universi
 - Evaluate against human grades with MAE, RMSE, bias, Pearson r, Cohen's kappa, and QWK.
 - Save run artifacts for research reproducibility.
 
+## Repository Structure
+
+```text
+.
+├── app.py                         # Main Streamlit application
+├── calibrated_grader.py           # Privacy/RAG/model grading engine
+├── document_reader.py             # Submission parsing
+├── privacy_processor.py           # Local PII anonymization
+├── rag_retriever.py               # Evidence retrieval
+├── evaluator.py                   # AI-vs-human metrics
+├── calibration_experiment.py      # Bias calibration validation
+├── run_experiments.py             # Publication experiment runner
+├── create_demo_data.py            # Synthetic demo data generator
+├── docs/                          # Faculty-facing docs and research notes
+├── src/streamlit_app.py           # Compatibility entrypoint
+├── SETUP.md                       # Detailed setup guide
+└── requirements.txt               # Python dependencies
+```
+
 ## Quick Start For Faculty
 
 ```bash
@@ -61,12 +80,19 @@ Then in the app:
 
 The demo files contain no real student data.
 
+## Documentation
+
+Faculty-facing and research materials are organized under [`docs/`](docs/):
+
+| Document | Purpose |
+|---|---|
+| [`docs/FACULTY_SETUP_AND_PUBLICATION_BRIEF.md`](docs/FACULTY_SETUP_AND_PUBLICATION_BRIEF.md) | Shareable setup and publication brief |
+| [`docs/PAPER_COMPARISON_SIMPLE.md`](docs/PAPER_COMPARISON_SIMPLE.md) | Simple explanation of related papers and how BullsEye differs |
+| [`docs/RESULTS_LAB01.md`](docs/RESULTS_LAB01.md) | Current Lab 01 empirical results |
+| [`docs/PUBLICATION_GAP_ANALYSIS.md`](docs/PUBLICATION_GAP_ANALYSIS.md) | Gap-to-experiment publication map |
+| [`docs/README.md`](docs/README.md) | Documentation index |
+
 ## Current Research Results
-
-The current Lab 01 evaluation is summarized in:
-
-- `RESULTS_LAB01.md`
-- `PUBLICATION_GAP_ANALYSIS.md`
 
 Reproduce the current evaluation:
 
@@ -114,8 +140,7 @@ Core evidence so far:
 | `evaluator.py` | AI-vs-human metrics |
 | `calibration_experiment.py` | Raw vs calibrated LOOCV validation |
 | `run_experiments.py` | Publication experiment runner |
-| `PUBLICATION_GAP_ANALYSIS.md` | Paper gap map |
-| `RESULTS_LAB01.md` | Current Lab 01 findings |
+| `docs/` | Faculty-facing documentation, results, and publication notes |
 
 ## Privacy Notes
 
